@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HASA</title>
+    <base href="/hasa/" />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/js-yaml@4/dist/js-yaml.min.js"></script>
+
+    <style>
+      body {
+        background-color: #ffffff;
+        color: #0f172a;
+      }
+      [v-cloak] { display: none; }
+      .glass-panel {
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(0, 0, 0, 0.05);
+      }
+    </style>
+  </head>
+
+  <body class="font-sans antialiased min-h-screen flex flex-col items-center p-4 lg:p-10">
+
+    <div id="app" class="w-full max-w-7xl mx-auto flex flex-col gap-8" v-cloak>
+
+      <!-- Project Intro -->
+      <div class="flex flex-col gap-6 text-center max-w-5xl mx-auto mt-2 mb-2">
+        <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 leading-tight">
+          HASA: Human-Aware Step Allocation for Efficient Video Diffusion Sampling
+        </h1>
+        <p class="text-slate-700 text-sm md:text-base leading-relaxed text-justify">
+          <strong>TL;DR</strong> HASA spends more denoising steps (NFEs) on human tokens and fewer on the background.
+        </p>
+
+        <div class="border border-green-500 p-4 text-left rounded-lg shadow-sm">
+          <p class="text-slate-800 text-sm md:text-base mb-3">
+            <strong>Tip:</strong> Download the entire website upfront to skip video loading (needs <a href="https://nodejs.org" target="_blank" class="text-blue-800 hover:underline">node</a> and git-lfs):
+          </p>
+          <div class="relative bg-green-50 rounded-md p-3 mb-3 group">
+            <button class="absolute top-2 right-2 border border-green-500 text-green-500 hover:text-white hover:bg-green-500 rounded px-2 py-1 text-xs transition-colors opacity-0 group-hover:opacity-100" onclick="navigator.clipboard.writeText('git lfs install\ngit clone https://github.com/f0r-paper/hasa\nnpx -y serve'); this.innerText='Copied!'; setTimeout(() => this.innerText='Copy', 2000)">
+              Copy
+            </button>
+            <pre class="text-sm font-mono overflow-x-auto"><code>git lfs install
+git clone https://github.com/f0r-paper/hasa
+npx -y serve</code></pre>
+          </div>
+          <p class="text-slate-800 text-sm md:text-base">
+            Then go to <a href="http://localhost:3000/hasa" target="_blank" class="text-blue-800 hover:underline">http://localhost:3000/hasa</a>
+          </p>
+        </div>
+
+        <p class="text-slate-700 text-sm md:text-base leading-relaxed text-justify">
+          Text-to-video diffusion transformers can now render convincing people, but every clip costs dozens of full forward passes over tens of thousands of spatiotemporal tokens, and the standard sampler spends the same number of denoising steps on a blurry background as on a speaking face or a gesturing hand. We present Human-Aware Step Allocation (HASA), a heterogeneous step-allocation sampler that gives every token its own step budget and spends the budget where that matters most, without retraining the generator. Early in sampling, HASA maps the model's own clean-video prediction to low-resolution images with a light-weight latent adapter, detects human keypoints on them with a frozen pose estimator, and routes face, hand and body tokens into a high-budget group that is updated at every step, while the remaining tokens are updated only every k-th step. Skipped tokens stay in the attention context through a synchronized key-value cache and are advanced with their cached velocity. Because the clean-video prediction sharpens as denoising proceeds, the detections are refreshed twice during sampling. We evaluate HASA on a new benchmark of 100 human-centric prompts (face close-ups, upper-body gestures, full-body actions, multi-person interactions and daily activities) on four generators, from 1.3B to 14B parameters and including a joint audio-video model, at matched compute budget. Quality and prompt alignment are measured by a pairwise vision-language judge against each model's full-step output, calibrated with a different-seed full-step sample. At 25% compute, HASA improves over uniform step reduction on three of the four models (up to +14.1 points, p<0.01) and reaches an operating point where the existing caching methods break down. The human prior adds a consistent gain over random token groups on the models that benefit from heterogeneous allocation, largest for full-body motion. We also report where HASA does not help: at 50% compute on the two largest models, where simply halving the step count is already as good as the full-step reference.
+
+        </p>
+        <div class="w-full flex flex-col items-center gap-2">
+          <img src="system.jpg" alt="Overview of Heterogeneous Step Allocation" class="w-full max-w-4xl h-auto" />
+          <p class="text-slate-500 text-xs md:text-sm max-w-4xl text-justify">
+            <strong>Heterogeneous Step Allocation.</strong> Tokens are split into groups with different step budgets; only the active tokens run through the network, attend to the full (fresh + cached) keys and values, and every token is advanced with its latest velocity.
+          </p>
+        </div>
+        <div class="w-full flex flex-col items-center gap-2">
+          <img src="prior.jpg" alt="Human prior on the token grid" class="w-full h-auto" />
+          <p class="text-slate-500 text-xs md:text-sm max-w-4xl text-justify">
+            <strong>Human prior on the token grid</strong> (Wan2.1-1.3B, one cell = one token). Face (red), hand (green) and body (blue) tokens get the dense schedule first.
+          </p>
+        </div>
+
+        <div class="w-screen relative left-1/2 right-1/2 -mx-[50vw] bg-slate-100 py-3 mt-8">
+          <h2 class="max-w-5xl mx-auto font-bold text-slate-800 text-xl text-center px-6 lg:px-10">Video comparison</h2>
+        </div>
+        <p class="text-slate-700 text-sm md:text-base leading-relaxed text-justify">
+          All 100 prompts of the benchmark on all four models, not selected: browse them by category with the arrows (or the &larr; / &rarr; keys). For each model, the full-step <span class="text-cyan-600 font-semibold">reference</span> is compared with two samplers at the same theoretical compute: <span class="font-semibold">Flow Matching</span> with proportionally fewer steps, and <span class="text-blue-800 font-semibold">HASA</span> with the human prior (ours). All videos of a prompt use the same seed. Under each video are the scores of our pairwise judge against the reference, for visual quality (Q) and prompt alignment (A): 50 means as good as the reference (<a href="#score-explainer" @click.prevent="showScoreInfo(null)" class="text-blue-800 hover:underline">how they are computed</a>). Drag the slider to resize the two sides.
+        </p>
+
+        <!-- Score explanation (target of the Q / A links on every panel) -->
+        <div id="score-explainer" ref="scoreBoxEl"
+             class="text-left rounded-lg border p-4 md:p-5 transition-all duration-500 scroll-mt-28"
+             :class="scoreHighlight ? 'border-blue-800 ring-4 ring-blue-200 bg-blue-50' : 'border-slate-200 bg-slate-50'">
+          <h3 class="font-bold text-slate-800 text-base md:text-lg mb-2">How the Q and A scores are computed</h3>
+          <p class="text-slate-700 text-sm md:text-base leading-relaxed text-justify mb-3">
+            Each score compares one video with its model's full-step reference from the same seed. A vision-language judge (Qwen3.8-27B) sees 16 frames of both videos and answers a single letter, A or B, for the video it prefers. Instead of keeping only the letter, we read the probabilities the judge assigns to the two answer tokens and normalize them: P(this video is better) = p<sub>A</sub> / (p<sub>A</sub> + p<sub>B</sub>). A confident judgment gives a value near 0 or 1, an uncertain one a value near 0.5.
+          </p>
+          <ul class="text-slate-700 text-sm md:text-base leading-relaxed list-none flex flex-col gap-2 mb-3">
+            <li class="rounded-md px-3 py-2 transition-colors duration-500" :class="scoreHighlight === 'Q' ? 'bg-yellow-200' : ''">
+              <strong>Q (quality):</strong> which video has better technical quality: sharpness and texture, noise, artifacts, well-formed faces, hands and bodies, temporal stability and natural motion. Differences in content are ignored.
+            </li>
+            <li class="rounded-md px-3 py-2 transition-colors duration-500" :class="scoreHighlight === 'A' ? 'bg-yellow-200' : ''">
+              <strong>A (alignment):</strong> which video matches the prompt better: the people and their appearance, actions, gestures and expressions, the setting and the camera.
+            </li>
+          </ul>
+          <p class="text-slate-700 text-sm md:text-base leading-relaxed text-justify">
+            Every video is judged four times: with the video shown first and shown second (to cancel the judge's position bias), each at two offsets of the sampled frames. The score is the mean of the four probabilities, in percent. For example, Q 73.7 averages 0.71, 0.73, 0.76 and 0.76: the judge consistently leans toward this video. A score of 50 means the video is as good as the reference; a full-step video with a different seed, equally good but different, averages 47&ndash;51 on our four models, which is the practical ceiling for any accelerated sampler.
+          </p>
+        </div>
+      </div>
+
+      <!-- Header & Controls -->
+      <header ref="headerEl"
+          class="glass-panel py-2 px-3 rounded-xl shadow-xl flex flex-row flex-wrap items-center justify-between gap-2 sticky top-4 z-50">
+        <!-- Category -->
+        <div class="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+          <button v-for="c in categories" :key="c.id" @click="category = c.id"
+                  :class="category === c.id ? 'bg-blue-800 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'"
+                  class="px-2 md:px-3 py-1 text-xs rounded font-bold transition-all duration-200">
+            {{ c.name }}
+          </button>
+        </div>
+
+        <!-- Prompt Navigation -->
+        <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+          <button @click="prev" :disabled="currentIndex === 0" aria-label="Previous prompt"
+             class="p-1 rounded hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+            </svg>
+          </button>
+          <div class="text-center min-w-[70px]">
+            <span class="text-xs font-semibold text-slate-700">{{ currentIndex + 1 }} / {{ prompts.length }}</span>
+          </div>
+          <button @click="next" :disabled="currentIndex === prompts.length - 1" aria-label="Next prompt"
+                  class="p-1 rounded hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Compute Toggle -->
+        <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+          <span class="px-2 text-xs font-bold">Compute</span>
+          <button v-for="b in ['25', '50']" :key="b" @click="budget = b"
+                  :class="budget === b ? 'bg-blue-800 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'"
+                  class="px-3 py-1 text-xs rounded font-bold transition-all duration-200">
+            {{ b }}%
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Video Content -->
+      <main class="w-full flex flex-col gap-16 pb-4">
+        <section v-for="section in sections" :key="section.id" class="flex flex-col gap-4 w-full">
+          <div class="flex flex-wrap justify-between items-end gap-2 border-b border-slate-200 pb-2">
+            <h2 class="text-2xl font-bold tracking-wide text-slate-800"><a :href="section.link" target="_blank" class="hover:underline">{{ section.name }}</a></h2>
+            <div class="flex gap-3 text-sm font-semibold tracking-wider text-slate-500 uppercase">
+              <span class="text-cyan-600">Reference (100%)</span>
+              <span>vs</span>
+              <span class="text-blue-800">{{ budget }}% compute</span>
+            </div>
+          </div>
+
+          <div v-if="!currentPrompt" class="text-center text-slate-400 py-10">Loading...</div>
+
+          <div v-else class="flex flex-col gap-4">
+            <input type="range" min="5" max="95" v-model="section.sliderPos" aria-label="Resize reference and accelerated videos"
+                   class="w-full accent-blue-800 cursor-pointer h-2 bg-slate-200 rounded-lg" />
+
+            <div class="flex flex-row w-full gap-2 md:gap-4 items-center justify-center">
+              <!-- Reference -->
+              <div class="flex-shrink-0 flex flex-col gap-1" :style="{ width: `calc(${section.sliderPos}% - 8px)` }">
+                <div class="text-xs md:text-sm font-bold text-cyan-600 truncate">Reference &middot; {{ section.ref_steps }} steps</div>
+                <video :ref="el => registerVideo(section.id + '_ref', el)"
+                       class="w-full h-auto max-h-[80vh] object-contain rounded-lg shadow-md box-border"
+                       :class="[section.audio ? 'cursor-pointer' : '', activeAudio === section.id + '_ref' ? 'border-[4px] border-green-500' : 'border border-slate-200']"
+                       @click="section.audio && setActiveAudio(section.id + '_ref')"
+                       :muted="activeAudio !== section.id + '_ref'"
+                       :src="videoSrc(section.id, 'ref')" autoplay loop playsinline></video>
+              </div>
+
+              <!-- Flow Matching and HASA at the same compute -->
+              <div class="flex-shrink-0 flex flex-col gap-2" :style="{ width: `calc(${100 - section.sliderPos}% - 8px)` }">
+                <div v-for="method in methods(section)" :key="method.key" class="flex flex-col gap-1">
+                  <div class="flex flex-wrap justify-between gap-x-2 text-xs md:text-sm">
+                    <span class="font-bold truncate" :class="method.ours ? 'text-blue-800' : 'text-slate-600'">{{ method.label }}</span>
+                    <span v-if="score(section.id, method.key)" class="font-mono text-slate-500 whitespace-nowrap">
+                      <button @click="showScoreInfo('Q')" title="Quality win rate vs. the reference: how is it computed?"
+                              class="hover:text-blue-800 hover:underline decoration-dotted">Q {{ score(section.id, method.key)[0] }}</button>
+                      &middot;
+                      <button @click="showScoreInfo('A')" title="Alignment win rate vs. the reference: how is it computed?"
+                              class="hover:text-blue-800 hover:underline decoration-dotted">A {{ score(section.id, method.key)[1] }}</button>
+                    </span>
+                  </div>
+                  <video :ref="el => registerVideo(section.id + '_' + method.key, el)"
+                         class="w-full h-auto max-h-[39vh] object-contain rounded-lg shadow-md box-border"
+                         :class="[section.audio ? 'cursor-pointer' : '', activeAudio === section.id + '_' + method.key ? 'border-[4px] border-green-500' : 'border border-slate-200']"
+                         @click="section.audio && setActiveAudio(section.id + '_' + method.key)"
+                         :muted="activeAudio !== section.id + '_' + method.key"
+                         :src="videoSrc(section.id, method.key)" autoplay loop playsinline></video>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="section.audio" class="text-center text-sm text-green-600 font-semibold">
+              Click on any video to play its audio
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- Footer -->
+      <footer ref="footerEl" @click="showPromptModal = true"
+          :class="isFooterVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'"
+          class="glass-panel py-2 px-4 rounded-xl flex items-center justify-between shadow-2xl sticky bottom-4 z-50 mt-4 cursor-pointer hover:bg-slate-50 transition-all duration-300">
+        <div class="flex items-center gap-3 text-xs font-mono text-slate-500 min-w-0">
+          <span class="uppercase tracking-widest font-semibold text-slate-400">{{ currentPrompt ? currentPrompt.id : '' }}</span>
+          <span class="text-slate-300">|</span>
+          <span class="text-xs text-slate-400 truncate">{{ currentPrompt ? currentPrompt.prompt : '' }}</span>
+        </div>
+      </footer>
+
+      <!-- Prompt Modal -->
+      <div v-if="showPromptModal" @click.self="showPromptModal = false"
+           class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 cursor-pointer">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl max-w-3xl w-full border border-slate-200 cursor-auto relative">
+          <button @click="showPromptModal = false" aria-label="Close" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+          <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3">Prompt &middot; {{ currentPrompt.id }}</h3>
+          <p class="text-slate-800 text-sm md:text-base leading-relaxed selection:bg-blue-200">{{ currentPrompt.prompt }}</p>
+        </div>
+      </div>
+
+    </div>
+
+    <script>
+      const { createApp, ref, computed, onMounted, watch, nextTick, onUnmounted } = Vue;
+
+      createApp({
+        setup() {
+          const categories = [
+            { id: 'all', name: 'All' },
+            { id: 'face_closeup', name: 'Face close-up' },
+            { id: 'upper_body_gesture', name: 'Upper-body gesture' },
+            { id: 'full_body_action', name: 'Full-body action' },
+            { id: 'multi_person', name: 'Multi-person' },
+            { id: 'daily_activity', name: 'Daily activity' },
+          ];
+          const category = ref('all');
+          const allPrompts = ref([]);
+          const sections = ref([]);
+          const scores = ref({});
+          const currentIndex = ref(0);
+          const budget = ref('25');
+          const activeAudio = ref(null);
+          const showPromptModal = ref(false);
+          const headerEl = ref(null);
+          const footerEl = ref(null);
+          const isFooterVisible = ref(false);
+          const videoEls = {};
+
+          const prompts = computed(() => category.value === 'all'
+            ? allPrompts.value : allPrompts.value.filter(p => p.category === category.value));
+          const currentPrompt = computed(() => prompts.value[currentIndex.value] || null);
+
+          const methods = (section) => [
+            { key: 'fm' + budget.value, ours: false,
+              label: `Flow Matching · ${section.fm_steps[budget.value]} steps · ${section.compute[budget.value]}` },
+            { key: 'hasa' + budget.value, ours: true,
+              label: `HASA (ours) · ${(section.hasa_compute || section.compute)[budget.value]}` },
+          ];
+          const videoSrc = (model, key) => currentPrompt.value ? `videos/${model}/${key}/${currentPrompt.value.id}.mp4` : '';
+          const score = (model, key) => {
+            const s = scores.value[model] && scores.value[model][key];
+            return s && currentPrompt.value ? s[currentPrompt.value.id] : null;
+          };
+          const registerVideo = (id, el) => { if (el) videoEls[id] = el; else delete videoEls[id]; };
+
+          // Q / A links: scroll to the explanation and highlight it (and the clicked score's line) for a moment
+          const scoreBoxEl = ref(null);
+          const scoreHighlight = ref(null);
+          let highlightTimer = null;
+          const showScoreInfo = (which) => {
+            if (!scoreBoxEl.value) return;
+            scoreBoxEl.value.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            scoreHighlight.value = which || 'box';
+            clearTimeout(highlightTimer);
+            highlightTimer = setTimeout(() => { scoreHighlight.value = null; }, 3000);
+          };
+
+          const checkFooterVisibility = () => {
+            if (headerEl.value && footerEl.value) {
+              isFooterVisible.value = headerEl.value.getBoundingClientRect().bottom < footerEl.value.getBoundingClientRect().top;
+            }
+          };
+
+          // restart every video together so the reference and the accelerated samples stay in step
+          const syncVideos = () => {
+            nextTick(() => {
+              Object.values(videoEls).forEach(v => {
+                v.currentTime = 0;
+                v.play().catch(() => {});
+              });
+            });
+          };
+
+          const onKey = (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            if (e.key === 'ArrowRight') next();
+            if (e.key === 'ArrowLeft') prev();
+            if (e.key === 'Escape') showPromptModal.value = false;
+          };
+
+          onMounted(async () => {
+            window.addEventListener('scroll', checkFooterVisibility, { passive: true });
+            window.addEventListener('resize', checkFooterVisibility, { passive: true });
+            window.addEventListener('keydown', onKey);
+            nextTick(checkFooterVisibility);
+            try {
+              const [resPrompts, resConfig, resScores] = await Promise.all([
+                fetch('prompts.json'), fetch('config.yaml'), fetch('scores.json')]);
+              allPrompts.value = await resPrompts.json();
+              sections.value = jsyaml.load(await resConfig.text()).map(s => ({ ...s, sliderPos: 50 }));
+              scores.value = await resScores.json();
+            } catch (e) {
+              console.error('Error fetching data:', e);
+            }
+          });
+
+          watch([currentIndex, budget], syncVideos);
+          watch(category, () => {
+            currentIndex.value = 0;
+            syncVideos();
+          });
+
+          const setActiveAudio = (id) => { activeAudio.value = (activeAudio.value === id) ? null : id; };
+          const next = () => { if (currentIndex.value < prompts.value.length - 1) currentIndex.value++; };
+          const prev = () => { if (currentIndex.value > 0) currentIndex.value--; };
+
+          onUnmounted(() => {
+            window.removeEventListener('scroll', checkFooterVisibility);
+            window.removeEventListener('resize', checkFooterVisibility);
+            window.removeEventListener('keydown', onKey);
+          });
+
+          return {
+            categories, category, prompts, currentIndex, currentPrompt, budget, sections, methods, videoSrc, score,
+            registerVideo, activeAudio, setActiveAudio, next, prev, showPromptModal, headerEl, footerEl, isFooterVisible,
+            scoreBoxEl, scoreHighlight, showScoreInfo
+          };
+        }
+      }).mount('#app');
+    </script>
+
+  </body>
+
+</html>

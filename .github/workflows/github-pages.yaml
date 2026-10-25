@@ -1,0 +1,53 @@
+name: GitHub Pages Deploy
+
+on:
+  push:
+    branches:
+      - main # Set a branch to deploy
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 🛎️ Checkout
+        uses: actions/checkout@v4
+
+      # Cache the LFS objects so a deploy only downloads videos that changed
+      - name: 🔑 List LFS objects
+        run: git lfs ls-files -l | cut -d' ' -f1 | sort > .lfs-assets-id
+
+      - name: 💾 Restore LFS cache
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('.lfs-assets-id') }}
+          restore-keys: lfs-
+
+      - name: 📦 Fetch large files
+        run: git lfs pull
+
+      - name: ⚙️ Configure Pages
+        uses: actions/configure-pages@v5
+
+      # Dotfiles (.git, .github, .gitattributes, .lfs-assets-id) are left out of the artifact
+      - name: 📤 Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./
+
+      - name: 🚀 Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

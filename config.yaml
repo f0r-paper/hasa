@@ -1,0 +1,31 @@
+# Models shown in the gallery, top to bottom. Videos live in videos/<id>/<ref|fm25|hasa25|fm50|hasa50>/<prompt id>.mp4
+# ref_steps: steps of the full-step reference; fm_steps / compute: per compute budget (25 / 50).
+- id: wan13b
+  name: Wan2.1-T2V-1.3B
+  link: https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B
+  ref_steps: 50
+  fm_steps: {"25": 12, "50": 25}
+  compute: {"25": "24%", "50": "50%"}
+  audio: false
+- id: k5
+  name: Kandinsky-5.0-T2V-Lite
+  link: https://arxiv.org/abs/2511.14993
+  ref_steps: 50
+  fm_steps: {"25": 12, "50": 25}
+  compute: {"25": "24%", "50": "50%"}
+  audio: false
+- id: a14b
+  name: Wan2.2-T2V-A14B
+  link: https://huggingface.co/Wan-AI/Wan2.2-T2V-A14B
+  ref_steps: 40
+  fm_steps: {"25": 10, "50": 20}
+  compute: {"25": "25%", "50": "50%"}
+  audio: false
+- id: h3
+  name: MiniMax-H3 (video + audio)
+  link: https://huggingface.co/MiniMaxAI/MiniMax-H3
+  ref_steps: 50
+  fm_steps: {"25": 12, "50": 25}
+  compute: {"25": "24%", "50": "50%"}
+  hasa_compute: {"25": "24.7%", "50": "51.4%"}
+  audio: true
